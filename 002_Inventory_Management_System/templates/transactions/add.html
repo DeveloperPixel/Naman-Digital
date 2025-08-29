@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Transaction{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 class="mb-3">Add Transaction</h2>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="item_id">Select Item *</label>
+            <select id="item_id" name="item_id" required>
+                <option value="">Choose an item...</option>
+                {% for item in items %}
+                <option value="{{ item.id }}">{{ item.name }} (Stock: {{ item.quantity }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="type">Transaction Type *</label>
+                <select id="type" name="type" required>
+                    <option value="">Select type...</option>
+                    <option value="in">Stock IN</option>
+                    <option value="out">Stock OUT</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="quantity">Quantity *</label>
+                <input type="number" id="quantity" name="quantity" min="1" required>
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="unit_price">Unit Price *</label>
+                <input type="number" id="unit_price" name="unit_price" step="0.01" min="0" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="reference_no">Reference Number</label>
+                <input type="text" id="reference_no" name="reference_no" placeholder="Invoice/PO number">
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="3"></textarea>
+        </div>
+        
+        <div class="form-group">
+            <button type="submit" class="btn">Add Transaction</button>
+            <a href="{{ url_for('transactions_list') }}" class="btn" style="background: #6c757d;">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

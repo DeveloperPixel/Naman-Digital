@@ -1,0 +1,202 @@
+{% extends 'base.html' %}
+
+{% block title %}Available Rooms{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <h1 class="text-2xl font-semibold">Available Rooms</h1>
+        <div class="flex gap-4">
+            <select id="filter-type" class="form-control" onchange="filterRooms()">
+                <option value="">All Room Types</option>
+                {% for type in room_types %}
+                <option value="{{ type.lower() }}">{{ type }}</option>
+                {% endfor %}
+            </select>
+            <input type="date" id="check-in" class="form-control" onchange="filterRooms()" min="{{ today }}" placeholder="Check-in">
+            <input type="date" id="check-out" class="form-control" onchange="filterRooms()" min="{{ today }}" placeholder="Check-out">
+        </div>
+    </div>
+
+    <div class="room-grid">
+        {% for room in rooms %}
+        <div class="room-card" data-room-type="{{ room.room_type.lower() if room.room_type else '' }}">
+            <div class="room-image" style="background-image: url('{{ room.image_url }}')">
+                <div class="room-type-badge">{{ room.room_type }}</div>
+            </div>
+            <div class="room-content">
+                <h3 class="room-title">Room {{ room.room_number }}</h3>
+                <p class="room-description">{{ room.description }}</p>
+                <div class="room-details">
+                    <div class="detail-item">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M7 8a3 3 0 100-6 3 3 0 000 6zM14.5 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM1.615 16.428a1.224 1.224 0 01-.569-1.175 6.002 6.002 0 0111.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 017 18a9.953 9.953 0 01-5.385-1.572zM14.5 16h-.106c.07-.297.088-.611.048-.933a7.47 7.47 0 00-1.588-3.755 4.502 4.502 0 015.874 2.636.818.818 0 01-.36.98A7.465 7.465 0 0114.5 16z"/>
+                        </svg>
+                        <span>Up to {{ room.capacity }} guests</span>
+                    </div>
+                    <div class="detail-item">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"/>
+                            <path fill-rule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>${{ room.price_per_night }} per night</span>
+                    </div>
+                </div>
+                <div class="room-amenities">
+                    {% for amenity in (room.amenities or '').split(',') %}
+                    <span class="amenity-tag">{{ amenity.strip() }}</span>
+                    {% endfor %}
+                </div>
+                <a href="{{ url_for('book', room_id=room.id) }}" class="book-button">Book Now</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<style>
+.room-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 2rem;
+    padding: 1rem;
+}
+
+.room-card {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: transform 0.2s;
+}
+
+.room-card:hover {
+    transform: translateY(-4px);
+}
+
+.room-image {
+    height: 200px;
+    background-size: cover;
+    background-position: center;
+    position: relative;
+}
+
+.room-type-badge {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.875rem;
+}
+
+.room-content {
+    padding: 1.5rem;
+}
+
+.room-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.room-description {
+    color: #666;
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+}
+
+.room-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.detail-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #555;
+}
+
+.detail-item .icon {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.room-amenities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.amenity-tag {
+    background: #f3f4f6;
+    padding: 0.25rem 0.75rem;
+    border-radius: 15px;
+    font-size: 0.75rem;
+    color: #555;
+}
+
+.book-button {
+    display: inline-block;
+    background: #4f46e5;
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    text-decoration: none;
+    text-align: center;
+    transition: background 0.2s;
+}
+
+.book-button:hover {
+    background: #4338ca;
+}
+
+.form-control {
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.875rem;
+}
+</style>
+
+<script>
+function filterRooms() {
+    const type = document.getElementById('filter-type').value;
+    const checkIn = document.getElementById('check-in').value;
+    const checkOut = document.getElementById('check-out').value;
+    
+    // Add form validation
+    if (checkIn && checkOut && new Date(checkIn) >= new Date(checkOut)) {
+        alert('Check-out date must be after check-in date');
+        return;
+    }
+    
+    // Redirect with filters
+    let url = '/rooms?';
+    if (type) url += `type=${type}&`;
+    if (checkIn) url += `check_in=${checkIn}&`;
+    if (checkOut) url += `check_out=${checkOut}`;
+    
+    window.location.href = url;
+}
+
+// Set min date for check-in and check-out
+document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('check-in').min = today;
+    document.getElementById('check-out').min = today;
+    
+    // Set values from URL params
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('type')) document.getElementById('filter-type').value = params.get('type');
+    if (params.get('check_in')) document.getElementById('check-in').value = params.get('check_in');
+    if (params.get('check_out')) document.getElementById('check-out').value = params.get('check_out');
+});
+</script>
+{% endblock %}

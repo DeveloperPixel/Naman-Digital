@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Item{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 class="mb-3">Edit Item</h2>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="name">Item Name *</label>
+            <input type="text" id="name" name="name" value="{{ item.name }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="3">{{ item.description or '' }}</textarea>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="category">Category</label>
+                <input type="text" id="category" name="category" value="{{ item.category or '' }}">
+            </div>
+            
+            <div class="form-group">
+                <label for="minimum_stock">Minimum Stock Level *</label>
+                <input type="number" id="minimum_stock" name="minimum_stock" min="0" value="{{ item.minimum_stock }}" required>
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: auto auto; gap: 1rem; align-items: center; margin-bottom: 1rem;">
+            <div>Current Quantity: {{ item.quantity }}</div>
+            <div>Current Unit Price: {{ item.unit_price|currency }}</div>
+        </div>
+        
+        <div class="form-group">
+            <button type="submit" class="btn">Update Item</button>
+            <a href="{{ url_for('items_list') }}" class="btn" style="background: #6c757d;">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

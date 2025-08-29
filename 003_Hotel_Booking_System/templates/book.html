@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+
+{% block title %}Book Room{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+        <div>
+            <h1 class="text-2xl font-semibold mb-4">Room Details</h1>
+            <div class="room-card" style="margin-bottom: 1rem;">
+                <div class="room-image" style="background-image: url('{{ room.image_url }}');"></div>
+                <div class="room-content">
+                    <div class="room-type">{{ room.room_type }}</div>
+                    <div class="room-info">{{ room.description }}</div>
+                    <div style="display: flex; gap: 1rem; margin: 1rem 0;">
+                        <div class="room-amenity">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                                <path d="M4.5 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM14.25 8.625a3.375 3.375 0 116.75 0 3.375 3.375 0 01-6.75 0zM1.5 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM17.25 19.128l-.001.144a2.25 2.25 0 01-.233.96 10.088 10.088 0 005.06-1.01.75.75 0 00.42-.643 4.875 4.875 0 00-6.957-4.611 8.586 8.586 0 011.71 5.157v.003z" />
+                            </svg>
+                            Max {{ room.capacity }} guests
+                        </div>
+                        {% if room.amenities %}
+                        {% for amenity in room.amenities.split(',') %}
+                        <div class="room-amenity">{{ amenity.strip() }}</div>
+                        {% endfor %}
+                        {% endif %}
+                    </div>
+                    <div class="room-price">{{ room.price_per_night|currency }}/night</div>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <h2 class="text-2xl font-semibold mb-4">Booking Details</h2>
+            <form method="POST" class="booking-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label for="check_in">Check-in Date</label>
+                    <input type="date" id="check_in" name="check_in" class="form-control" required min="{{ today }}" />
+                </div>
+                
+                <div class="form-group">
+                    <label for="check_out">Check-out Date</label>
+                    <input type="date" id="check_out" name="check_out" class="form-control" required min="{{ today }}" />
+                </div>
+
+                <div class="form-group">
+                    <label for="guests">Number of Guests</label>
+                    <input type="number" id="guests" name="guests" class="form-control" required min="1" max="{{ room.capacity }}" value="1" />
+                    <small class="text-gray-500">Maximum capacity: {{ room.capacity }} guests</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="special_requests">Special Requests (Optional)</label>
+                    <textarea id="special_requests" name="special_requests" class="form-control" rows="3"></textarea>
+                </div>
+
+                <div class="card" style="margin: 2rem 0;">
+                    <h3 class="text-lg font-semibold mb-2">Price Details</h3>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <span>Room rate per night</span>
+                        <span>${{ room.price }}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;" id="nights-row">
+                        <span>Number of nights</span>
+                        <span>0</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <span>Taxes and fees</span>
+                        <span id="taxes">$0</span>
+                    </div>
+                    <hr style="margin: 1rem 0;">
+                    <div style="display: flex; justify-content: space-between; font-weight: 600;">
+                        <span>Total</span>
+                        <span id="total">$0</span>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-full">
+                    Confirm Booking
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const checkIn = document.getElementById('check_in');
+    const checkOut = document.getElementById('check_out');
+    const guests = document.getElementById('guests');
+    
+    function calculatePrice() {
+        if (checkIn.value && checkOut.value) {
+            const start = new Date(checkIn.value);
+            const end = new Date(checkOut.value);
+            const nights = Math.round((end - start) / (1000 * 60 * 60 * 24));
+            
+            if (nights > 0) {
+                const basePrice = {{ room.price }} * nights;
+                const tax = basePrice * 0.1; // 10% tax
+                const total = basePrice + tax;
+                
+                document.getElementById('nights-row').querySelector('span:last-child').textContent = nights;
+                document.getElementById('taxes').textContent = '$' + tax.toFixed(2);
+                document.getElementById('total').textContent = '$' + total.toFixed(2);
+            }
+        }
+    }
+    
+    checkIn.addEventListener('change', calculatePrice);
+    checkOut.addEventListener('change', calculatePrice);
+    
+    // Form validation
+    document.querySelector('form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        if (!checkIn.value || !checkOut.value) {
+            alert('Please select check-in and check-out dates');
+            return;
+        }
+        
+        const start = new Date(checkIn.value);
+        const end = new Date(checkOut.value);
+        
+        if (start >= end) {
+            alert('Check-out date must be after check-in date');
+            return;
+        }
+        
+        if (guests.value > {{ room.capacity }}) {
+            alert('Number of guests exceeds room capacity');
+            return;
+        }
+        
+        this.submit();
+    });
+});
+</script>
+{% endblock %}

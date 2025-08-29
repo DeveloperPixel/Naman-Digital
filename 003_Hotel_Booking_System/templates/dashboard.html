@@ -1,0 +1,333 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <h1 class="text-2xl font-semibold">My Bookings</h1>
+        <a href="{{ url_for('rooms') }}" class="btn btn-primary">Book New Room</a>
+    </div>
+
+    {% if bookings %}
+    <div class="overflow-x-auto">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Booking ID</th>
+                    <th>Room</th>
+                    <th>Check-in</th>
+                    <th>Check-out</th>
+                    <th>Guests</th>
+                    <th>Status</th>
+                    <th>Total</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for booking in bookings %}
+                <tr>
+                    <td>{{ booking.id }}</td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <div class="room-image" style="width: 60px; height: 40px; background-image: url('{{ booking.room.image }}');"></div>
+                            {{ booking.room.type }}
+                        </div>
+                    </td>
+                    <td>{{ booking.check_in.strftime('%Y-%m-%d') }}</td>
+                    <td>{{ booking.check_out.strftime('%Y-%m-%d') }}</td>
+                    <td>{{ booking.guests }}</td>
+                    <td>
+                        <span class="badge {{ booking.status.lower() }}">
+                            {{ booking.status }}
+                        </span>
+                    </td>
+                    <td>${{ booking.total }}</td>
+                    <td>
+                        {% if booking.status == 'Upcoming' %}
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-secondary" onclick="showBookingDetails('{{ booking.id }}')">
+                                Details
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="cancelBooking('{{ booking.id }}')">
+                                Cancel
+                            </button>
+                        </div>
+                        {% elif booking.status == 'Active' %}
+                        <button class="btn btn-sm btn-primary" onclick="showBookingDetails('{{ booking.id }}')">
+                            View Details
+                        </button>
+                        {% else %}
+                        <button class="btn btn-sm btn-secondary" onclick="showBookingDetails('{{ booking.id }}')">
+                            View Details
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Booking Details Modal -->
+    <div id="booking-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Booking Details</h2>
+                <button onclick="closeModal()" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="booking-details"></div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="text-center py-8">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="48" height="48" style="margin: 0 auto 1rem; color: var(--gray-400);">
+            <path d="M11.25 4.533A9.707 9.707 0 006 3a9.735 9.735 0 00-3.25.555.75.75 0 00-.5.707v14.25a.75.75 0 001 .707A8.237 8.237 0 016 18.75c1.995 0 3.823.707 5.25 1.886V4.533zM12.75 20.636A8.214 8.214 0 0118 18.75c.966 0 1.89.166 2.75.47a.75.75 0 001-.708V4.262a.75.75 0 00-.5-.707A9.735 9.735 0 0018 3a9.707 9.707 0 00-5.25 1.533v16.103z" />
+        </svg>
+        <h2 class="text-xl font-semibold mb-2">No Bookings Yet</h2>
+        <p class="text-gray mb-4">You haven't made any bookings yet. Start by browsing our available rooms.</p>
+        <a href="{{ url_for('rooms') }}" class="btn btn-primary">Browse Rooms</a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function showBookingDetails(bookingId) {
+    // Fetch booking details from the server
+    fetch(`/api/bookings/${bookingId}`)
+        .then(response => response.json())
+        .then(booking => {
+            const details = document.getElementById('booking-details');
+            details.innerHTML = `
+                <div class="booking-details">
+                    <div class="room-card">
+                        <div class="room-image" style="background-image: url('${booking.room.image}');"></div>
+                        <div class="room-content">
+                            <div class="room-type">${booking.room.type}</div>
+                            <div class="room-info">${booking.room.description}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="details-grid">
+                        <div>
+                            <label>Check-in</label>
+                            <p>${booking.check_in}</p>
+                        </div>
+                        <div>
+                            <label>Check-out</label>
+                            <p>${booking.check_out}</p>
+                        </div>
+                        <div>
+                            <label>Guests</label>
+                            <p>${booking.guests}</p>
+                        </div>
+                        <div>
+                            <label>Status</label>
+                            <p><span class="badge ${booking.status.toLowerCase()}">${booking.status}</span></p>
+                        </div>
+                        <div>
+                            <label>Special Requests</label>
+                            <p>${booking.special_requests || 'None'}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="price-details">
+                        <h3>Price Details</h3>
+                        <div class="price-row">
+                            <span>Room rate (${booking.nights} nights)</span>
+                            <span>$${booking.room_total}</span>
+                        </div>
+                        <div class="price-row">
+                            <span>Taxes and fees</span>
+                            <span>$${booking.taxes}</span>
+                        </div>
+                        <div class="price-row total">
+                            <span>Total</span>
+                            <span>$${booking.total}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('booking-modal').style.display = 'block';
+        });
+}
+
+function closeModal() {
+    document.getElementById('booking-modal').style.display = 'none';
+}
+
+function cancelBooking(bookingId) {
+    if (confirm('Are you sure you want to cancel this booking?')) {
+        fetch(`/api/bookings/${bookingId}/cancel`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                location.reload();
+            } else {
+                alert('Failed to cancel booking. Please try again.');
+            }
+        });
+    }
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('booking-modal');
+    if (event.target == modal) {
+        modal.style.display = 'none';
+    }
+}
+</script>
+
+<style>
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+}
+
+.modal-content {
+    position: relative;
+    background: white;
+    margin: 10% auto;
+    padding: 0;
+    width: 90%;
+    max-width: 800px;
+    border-radius: 0.5rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.modal-header h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    color: var(--gray-500);
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.booking-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.details-grid label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--gray-600);
+}
+
+.price-details {
+    background: var(--gray-50);
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+}
+
+.price-details h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.price-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.price-row.total {
+    border-top: 1px solid var(--gray-200);
+    margin-top: 1rem;
+    padding-top: 1rem;
+    font-weight: 600;
+}
+
+.badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.badge.upcoming {
+    background: var(--primary-50);
+    color: var(--primary-700);
+}
+
+.badge.active {
+    background: var(--green-50);
+    color: var(--green-700);
+}
+
+.badge.completed {
+    background: var(--gray-100);
+    color: var(--gray-700);
+}
+
+.badge.cancelled {
+    background: var(--red-50);
+    color: var(--red-700);
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table th {
+    text-align: left;
+    padding: 1rem;
+    background: var(--gray-50);
+    font-weight: 600;
+}
+
+.table td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--gray-100);
+}
+
+.btn-group {
+    display: flex;
+    gap: 0.5rem;
+}
+</style>
+{% endblock %}

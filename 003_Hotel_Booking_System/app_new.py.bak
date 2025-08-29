@@ -1,0 +1,407 @@
+import sqlite3
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime, timedelta
+from functools import wraps
+from flask_wtf.csrf import CSRFProtect
+
+app = Flask(__name__)
+app.secret_key = 'your_secret_key_here'  # Change this in production
+csrf = CSRFProtect(app)
+
+def init_db():
+    conn = sqlite3.connect('hotel.db')
+    c = conn.cursor()
+    
+    # Create users table
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        full_name TEXT NOT NULL,
+        phone TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    
+    # Create rooms table
+    c.execute('''CREATE TABLE IF NOT EXISTS rooms (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        room_number TEXT UNIQUE NOT NULL,
+        room_type TEXT NOT NULL,
+        capacity INTEGER NOT NULL,
+        price_per_night REAL NOT NULL,
+        image_url TEXT,
+        description TEXT,
+        amenities TEXT,
+        status TEXT DEFAULT 'available' CHECK(status IN ('available', 'occupied', 'maintenance'))
+    )''')
+    
+    # Create bookings table
+    c.execute('''CREATE TABLE IF NOT EXISTS bookings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        room_id INTEGER NOT NULL,
+        check_in_date DATE NOT NULL,
+        check_out_date DATE NOT NULL,
+        num_guests INTEGER NOT NULL,
+        total_price REAL NOT NULL,
+        status TEXT DEFAULT 'confirmed' CHECK(status IN ('confirmed', 'completed', 'cancelled')),
+        special_requests TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id),
+        FOREIGN KEY (room_id) REFERENCES rooms (id)
+    )''')
+    
+    # Add sample rooms if none exist
+    c.execute('SELECT COUNT(*) FROM rooms')
+    if c.fetchone()[0] == 0:
+        sample_rooms = [
+            ('101', 'Standard', 2, 100.00, '/static/images/standard-room.jpg', 'Cozy standard room with basic amenities', 'WiFi, TV, AC', 'available'),
+            ('201', 'Deluxe', 3, 150.00, '/static/images/deluxe-room.jpg', 'Spacious deluxe room with city view', 'WiFi, TV, AC, Mini Bar, City View', 'available'),
+            ('301', 'Suite', 4, 250.00, '/static/images/suite-room.jpg', 'Luxury suite with separate living area', 'WiFi, TV, AC, Mini Bar, Living Room, Kitchen', 'available'),
+        ]
+        c.executemany('INSERT INTO rooms (room_number, room_type, capacity, price_per_night, image_url, description, amenities, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', sample_rooms)
+        conn.commit()
+
+    
+    # Create bookings table
+    c.execute('''CREATE TABLE IF NOT EXISTS bookings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        room_id INTEGER NOT NULL,
+        check_in DATE NOT NULL,
+        check_out DATE NOT NULL,
+        guests INTEGER NOT NULL,
+        total_price REAL NOT NULL,
+        status TEXT DEFAULT 'confirmed' CHECK(status IN ('confirmed', 'cancelled', 'completed')),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        special_requests TEXT,
+        FOREIGN KEY (user_id) REFERENCES users (id),
+        FOREIGN KEY (room_id) REFERENCES rooms (id)
+    )''')
+    
+    conn.commit()
+    
+    # Add some sample rooms if none exist
+    c.execute('SELECT COUNT(*) FROM rooms')
+    if c.fetchone()[0] == 0:
+        sample_rooms = [
+            ('101', 'Standard', 2, 100, 'WiFi, TV, AC', 'available', 'https://images.unsplash.com/photo-1611892440504-42a792e24d32'),
+            ('201', 'Deluxe', 3, 180, 'WiFi, TV, AC, Mini Bar', 'available', 'https://images.unsplash.com/photo-1590490360182-c33d57733427'),
+            ('301', 'Suite', 4, 300, 'WiFi, TV, AC, Mini Bar, Living Room', 'available', 'https://images.unsplash.com/photo-1591088398332-8a7791972843')
+        ]
+        c.executemany('INSERT INTO rooms (room_number, room_type, capacity, price_per_night, amenities, status, image_url) VALUES (?, ?, ?, ?, ?, ?, ?)', sample_rooms)
+        conn.commit()
+    
+    conn.close()
+
+def get_db():
+    conn = sqlite3.connect('hotel.db')
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.template_filter('date')
+def date_filter(value):
+    if isinstance(value, str):
+        return datetime.strptime(value, '%Y-%m-%d').strftime('%B %d, %Y')
+    return value.strftime('%B %d, %Y')
+
+@app.template_filter('currency')
+def currency_filter(value):
+    return f'${value:,.2f}'
+
+@app.route('/')
+def index():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT * FROM rooms LIMIT 3')
+    featured_rooms = c.fetchall()
+    return render_template('index.html', rooms=featured_rooms)
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        email = request.form['email']
+        full_name = request.form['full_name']
+        phone = request.form['phone']
+        
+        conn = get_db()
+        c = conn.cursor()
+        
+        try:
+            c.execute('INSERT INTO users (username, password, email, full_name, phone) VALUES (?, ?, ?, ?, ?)',
+                     (username, generate_password_hash(password), email, full_name, phone))
+            conn.commit()
+            flash('Registration successful! Please login.', 'success')
+            return redirect(url_for('login'))
+        except sqlite3.IntegrityError:
+            flash('Username or email already exists!', 'error')
+        finally:
+            conn.close()
+            
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('SELECT * FROM users WHERE username = ?', (username,))
+        user = c.fetchone()
+        
+        if user and check_password_hash(user['password'], password):
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            flash('Welcome back!', 'success')
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Invalid username or password!', 'error')
+        
+        conn.close()
+            
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('index'))
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    conn = get_db()
+    c = conn.cursor()
+    
+    # Get user's bookings
+    c.execute('''
+        SELECT b.*, r.room_number, r.room_type, r.price_per_night, r.image_url
+        FROM bookings b
+        JOIN rooms r ON b.room_id = r.id
+        WHERE b.user_id = ?
+        ORDER BY b.check_in DESC
+    ''', (session['user_id'],))
+    
+    bookings = c.fetchall()
+    return render_template('dashboard.html', bookings=bookings)
+
+@app.route('/rooms')
+def rooms():
+    db = get_db()
+    cursor = db.cursor()
+    
+    # Get filter parameters
+    room_type = request.args.get('type')
+    check_in = request.args.get('check_in')
+    check_out = request.args.get('check_out')
+    
+    # Base query to get available rooms
+    query = '''
+        SELECT r.* FROM rooms r 
+        WHERE r.status = 'available'
+    '''
+    params = []
+    
+    # Add room type filter
+    if room_type:
+        query += ' AND r.room_type = ?'
+        params.append(room_type)
+    
+    # Add date availability filter
+    if check_in and check_out:
+        query += '''
+            AND r.id NOT IN (
+                SELECT room_id FROM bookings 
+                WHERE status = 'confirmed'
+                AND (
+                    (check_in_date <= ? AND check_out_date >= ?)
+                    OR (check_in_date <= ? AND check_out_date >= ?)
+                    OR (check_in_date >= ? AND check_out_date <= ?)
+                )
+            )
+        '''
+        params.extend([check_out, check_in, check_in, check_out, check_in, check_out])
+    
+    cursor.execute(query, params)
+    rooms = cursor.fetchall()
+    
+    # Get all unique room types for filter dropdown
+    cursor.execute('SELECT DISTINCT room_type FROM rooms')
+    room_types = [row[0] for row in cursor.fetchall()]
+    
+    # Add today's date for min date in date inputs
+    today = datetime.now().strftime('%Y-%m-%d')
+    
+    return render_template('rooms.html', rooms=rooms, room_types=room_types, today=today)
+
+
+@app.route('/book/<int:room_id>', methods=['GET', 'POST'])
+@login_required
+def book(room_id):
+    db = get_db()
+    cursor = db.cursor()
+    
+    # Get room details
+    cursor.execute('SELECT * FROM rooms WHERE id = ?', (room_id,))
+    room = cursor.fetchone()
+    
+    if request.method == 'POST':
+        check_in = request.form['check_in']
+        check_out = request.form['check_out']
+        num_guests = int(request.form['guests'])
+        
+        # Validate dates
+        check_in_date = datetime.strptime(check_in, '%Y-%m-%d').date()
+        check_out_date = datetime.strptime(check_out, '%Y-%m-%d').date()
+        
+        if check_in_date >= check_out_date:
+            flash('Check-out date must be after check-in date', 'error')
+            return redirect(url_for('book', room_id=room_id))
+        
+        if num_guests > room['capacity']:
+            flash(f'Maximum capacity for this room is {room["capacity"]} guests', 'error')
+            return redirect(url_for('book', room_id=room_id))
+        
+        # Calculate total price
+        nights = (check_out_date - check_in_date).days
+        total_price = nights * room['price_per_night']
+        
+        # Check room availability
+        cursor.execute('''
+            SELECT COUNT(*) FROM bookings 
+            WHERE room_id = ? AND status = 'confirmed'
+            AND (
+                (check_in_date <= ? AND check_out_date >= ?)
+                OR (check_in_date <= ? AND check_out_date >= ?)
+                OR (check_in_date >= ? AND check_out_date <= ?)
+            )
+        ''', (room_id, check_out, check_in, check_in, check_out, check_in, check_out))
+        
+        if cursor.fetchone()[0] > 0:
+            flash('Room is not available for the selected dates', 'error')
+            return redirect(url_for('book', room_id=room_id))
+        
+        # Create booking
+        cursor.execute('''
+            INSERT INTO bookings (user_id, room_id, check_in_date, check_out_date, num_guests, total_price)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (session['user_id'], room_id, check_in, check_out, num_guests, total_price))
+        
+        db.commit()
+        flash('Booking confirmed successfully!', 'success')
+        return redirect(url_for('dashboard'))
+    
+    return render_template('book.html', room=room)
+def book(room_id):
+    conn = get_db()
+    c = conn.cursor()
+    
+    if request.method == 'POST':
+        check_in = datetime.strptime(request.form['check_in'], '%Y-%m-%d')
+        check_out = datetime.strptime(request.form['check_out'], '%Y-%m-%d')
+        guests = int(request.form['guests'])
+        special_requests = request.form.get('special_requests', '')
+        
+        # Calculate total price
+        c.execute('SELECT price_per_night FROM rooms WHERE id = ?', (room_id,))
+        price_per_night = c.fetchone()[0]
+        nights = (check_out - check_in).days
+        total_price = price_per_night * nights
+        
+        # Create booking
+        c.execute('''
+            INSERT INTO bookings (user_id, room_id, check_in, check_out, guests, total_price, special_requests)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (session['user_id'], room_id, check_in.date(), check_out.date(), guests, total_price, special_requests))
+        
+        # Update room status
+        c.execute('UPDATE rooms SET status = ? WHERE id = ?', ('occupied', room_id))
+        
+        conn.commit()
+        flash('Booking confirmed successfully!', 'success')
+        return redirect(url_for('dashboard'))
+    
+    c.execute('SELECT * FROM rooms WHERE id = ?', (room_id,))
+    room = c.fetchone()
+    
+    if not room:
+        flash('Room not found!', 'error')
+        return redirect(url_for('rooms'))
+        
+    return render_template('book.html', room=room)
+
+@app.route('/cancel_booking/<int:booking_id>')
+@login_required
+def cancel_booking(booking_id):
+    conn = get_db()
+    c = conn.cursor()
+    
+    # Check if booking belongs to user
+    c.execute('SELECT * FROM bookings WHERE id = ? AND user_id = ?', (booking_id, session['user_id']))
+    booking = c.fetchone()
+    
+    if booking and booking['status'] == 'confirmed':
+        # Update booking status
+        c.execute('UPDATE bookings SET status = ? WHERE id = ?', ('cancelled', booking_id))
+        # Update room status
+        c.execute('UPDATE rooms SET status = ? WHERE id = ?', ('available', booking['room_id']))
+        conn.commit()
+        flash('Booking cancelled successfully!', 'success')
+    else:
+        flash('Invalid booking or already cancelled!', 'error')
+    
+    return redirect(url_for('dashboard'))
+
+@app.route('/api/bookings/<int:booking_id>')
+@login_required
+def get_booking_details(booking_id):
+    conn = get_db()
+    c = conn.cursor()
+    
+    c.execute('''
+        SELECT b.*, r.room_number, r.room_type, r.price_per_night, r.image_url,
+               u.full_name, u.email, u.phone
+        FROM bookings b
+        JOIN rooms r ON b.room_id = r.id
+        JOIN users u ON b.user_id = u.id
+        WHERE b.id = ? AND b.user_id = ?
+    ''', (booking_id, session['user_id']))
+    
+    booking = c.fetchone()
+    
+    if not booking:
+        return jsonify({'error': 'Booking not found'}), 404
+        
+    return jsonify({
+        'id': booking['id'],
+        'room': {
+            'number': booking['room_number'],
+            'type': booking['room_type'],
+            'price': booking['price_per_night'],
+            'image': booking['image_url']
+        },
+        'check_in': booking['check_in'],
+        'check_out': booking['check_out'],
+        'guests': booking['guests'],
+        'total_price': booking['total_price'],
+        'status': booking['status'],
+        'special_requests': booking['special_requests']
+    })
+
+if __name__ == '__main__':
+    init_db()
+    app.run(debug=True)
